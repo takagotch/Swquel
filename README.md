@@ -281,11 +281,78 @@ post.comments_detaset.destroy
 post.tags_dataset.where(subscribers: 0).order(:name).all
 
 class Person < Sequel::Model
+  one_to_many :posts, :eager=>[:tags]
 end
 class Post < Sequel::Model
+  many_to_one :person
+  one_to_many :replies
+  many_to_many :tags
 end
 class Tag < Sequel::Model
+  many_to_many :posts
+  many_to_many :replies
 end
+class Reply < Sequel::Model
+  many_to_one :person
+  many_to_one :post
+  many_to_many :tags
+end
+Post.eager(:persson).all
+Post.where{topic > 'M'}.order(:date).limit(5).eager(:person).all
+person = Person.first
+person.posts
+Post.eager(:persion, :tags).all
+Post.eager(:person).eager(:tags).all
+Tag.eager(posts: :replies).all
+Reply.eager(persion: :posts).all
+Person.eager(posts: {replies: [:persion, {tags: [:posts, :replies]}]}).all
+
+Post.eager(replies: proc{|ds| ds.where(Sequel.like(text, '%foo%'))}).all
+Post.eager_graph(replies: proc{|ds| ds.where(Sequel.like(text, '%foo%'))}).all
+Post.eager(replies: {proc{|ds| ds.where(Sequel.like(text, '%foo%'))} => [:person, :tags]}).all
+Post.association_left_join(:replies)
+# SELECT * FROM posts
+# LEFT JOIN replies ON (replies.post_id = posts.id)
+Post.association_join(:author, replies: :person).all
+# SELECT * FROM posts
+# INNER JOIN authors AS author ON (author.id = posts.author_id)
+# INNNER JOIN replies ON (replies.post_id = posts.id)
+# INNNER JOIN people AS person (person.id = replies.person_id)
+class Post < Sequel::Model
+  dataset_module do
+    where{num_comments < 30}
+  end
+  def clean_boring
+    with_few_comments.delete
+  end
+end
+
+Post.where(category: 'ruby').clean_boring
+# DELETE FROM posts WHERE ((category = 'ruby') AND (num_comments < 30))
+class Post < Sequel::Model
+  dataset_module do
+    where(:with_few_comments, Sequel[:num_commnets] < 30)
+    select :with_title_and_date, :id, :title, :post_date
+    order :by_post_date, :post_date
+    limit :top10, 10
+  end
+end
+Post.with_few_comments.with_title_and_date.by_post_date.top10
+# SELECT id, title, post_date
+# FROM posts
+# ORDER BY post_date
+# LIMIT 10
+
+class Post < Sequel::Module
+  def validate
+    super
+    errors.add(:name, "can't be empty") if name.empty?
+    errors.add(:written_on, "should be in the past") if written_on >= Time.now
+  end
+end
+
+
+
 
 
 
